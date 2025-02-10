@@ -1,0 +1,13 @@
+{
+    "rewrites": [
+      {
+        "source": "/(.*)",
+        "destination": "/index.html"
+      }
+    ],
+    "env": {
+      "VITE_API_URL": "your-backend-url-will-go-here",
+      "VITE_RPC_URL": "your-sepolia-rpc-url",
+      "VITE_WALLET_CONNECT_ID": "your-wallet-connect-project-id"
+    }
+  }
