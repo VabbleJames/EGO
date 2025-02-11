@@ -3,6 +3,7 @@ import { useAccount, useReadContract, usePublicClient } from 'wagmi';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { erc20Abi } from 'viem';
 import { SEPOLIA_CONTRACTS } from '../constants/addresses';
+import { API_URL } from '../../config';
 
 async function fetchTradePrice(address, dtfId) {
   try {
@@ -20,7 +21,7 @@ export function useUserTrades() {
   const queryClient = useQueryClient();
   const [timestamp, setTimestamp] = useState(Date.now()); 
   const { data: nextDtfId } = useReadContract({
-  
+
     address: SEPOLIA_CONTRACTS.DTF_MARKET,
     abi: [{
       "inputs": [],
@@ -31,6 +32,42 @@ export function useUserTrades() {
     }],
     functionName: 'nextDtfId'
   });
+
+  // Adding some console logs. Remove after fix
+
+  const fetchTrades = async () => {
+    const url = `${import.meta.env.VITE_API_URL}/api/v1/trades/${address}?t=${timestamp}`;
+    console.log('Attempting to fetch from:', url);
+    
+    try {
+      const response = await fetch(url, {
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0'
+        }
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Response not OK:', {
+          status: response.status,
+          statusText: response.statusText,
+          errorText
+        });
+        throw new Error(`Failed to fetch trades: ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log('Trades data received:', data);
+      setIsLoading(false);
+      return data;
+    } catch (error) {
+      console.error('Full error details:', error);
+      setIsLoading(false);
+      return [];
+    }
+  };
 
   useEffect(() => {
     const eventSource = new EventSource('${API_URL}/api/v1/events');
@@ -44,6 +81,8 @@ export function useUserTrades() {
 
     return () => eventSource.close();
   }, [address, queryClient]);
+
+  console.log('API URL:', API_URL);
 
   const { data: trades, refetch: queryRefetch } = useQuery({
     queryKey: ['trades', address, timestamp],
