@@ -240,14 +240,14 @@ function EnhancedDTFCard({ dtfId }) {
           disabled
           className="w-full py-3 bg-gray-600 rounded-lg transition-colors cursor-not-allowed text-gray-300"
         >
-          DTF Settled
+          EGO Settled
         </button>
       ) : isExpired ? (
         <button
           onClick={handleSettle}
           className="w-full py-3 bg-red-500 hover:bg-red-600 rounded-lg transition-colors"
         >
-          Settle DTF
+          Settle EGO
         </button>
       ) : (
         <button

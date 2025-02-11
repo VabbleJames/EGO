@@ -20,7 +20,7 @@ const RecentTradeCard = ({ trade, isFlashing }) => {
         ${isFlashing ? (trade.type === 'YES' ? 'bg-green-500/20' : 'bg-red-500/20') : ''}
       `}
     >
-      <div className="text-sm text-gray-400 mb-2">Recent Trade • DTF #{trade.dtfId}</div>
+      <div className="text-sm text-gray-400 mb-2">Recent Trade • EGO #{trade.dtfId}</div>
       <div className="text-white">{trade.trader}</div>
       <div className={`text-sm ${trade.type === 'YES' ? 'text-green-500' : 'text-red-500'}`}>
         Bought {trade.type} ${trade.amount}

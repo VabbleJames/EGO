@@ -33,7 +33,7 @@ export function useUserTrades() {
   });
 
   useEffect(() => {
-    const eventSource = new EventSource('http://localhost:3001/api/v1/events');
+    const eventSource = new EventSource('${API_URL}/api/v1/events');
     
     eventSource.onmessage = (event) => {
       const data = JSON.parse(event.data);
@@ -54,7 +54,7 @@ export function useUserTrades() {
       
       try {
         const response = await fetch(
-          `http://localhost:3001/api/v1/trades/${address}?t=${timestamp}`,
+          `${API_URL}/api/v1/trades/${address}?t=${timestamp}`,
           {
             headers: {
               'Cache-Control': 'no-cache, no-store, must-revalidate',

@@ -36,10 +36,10 @@ function NavigationBar() {
           </div>
 
           <div className="hidden md:flex items-center space-x-8">
-            <NavLink to="/trading">DTF Trading</NavLink>
-            <NavLink to="/trades">Your Trades</NavLink>
-            <NavLink to="/your-dtfs">Your DTFs</NavLink>
-            <NavLink to="/create">Create DTF</NavLink>
+            <NavLink to="/trading">Live EGOs</NavLink>
+            <NavLink to="/trades">Your Shares</NavLink>
+            <NavLink to="/your-dtfs">Your EGOs</NavLink>
+            <NavLink to="/create">Create EGO</NavLink>
           </div>
 
           <WalletConnect />

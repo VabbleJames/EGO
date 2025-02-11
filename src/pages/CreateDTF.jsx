@@ -268,7 +268,7 @@ function CreateDTF() {
 
   return (
     <div className="max-w-2xl mx-auto p-4">
-      <h1 className="text-2xl font-bold mb-6 text-white">Create DTF</h1>
+      <h1 className="text-2xl font-bold mb-6 text-white"></h1>
 
       <div className="bg-black rounded-xl p-6 border border-white/20">
 
@@ -276,13 +276,13 @@ function CreateDTF() {
 
         {/* DTF Name Input */}
         <div>
-          <label className="block text-sm font-medium text-gray-300">DTF Name</label>
+          <label className="block text-sm font-medium text-gray-300">EGO Name</label>
           <input
             type="text"
             value={formData.name}
             onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
             className="mt-1 block w-full p-2 bg-card-dark border border-white/20 rounded-md text-text-primary"
-            placeholder="Enter DTF name"
+            placeholder="Enter EGO name"
             required
           />
         </div>
@@ -345,7 +345,7 @@ function CreateDTF() {
 
         {/* Current Valuation Display */}
         <div className="p-4 bg-card-dark rounded-md border border-white/20">
-          <div className="text-sm text-text-secondary">Current DTF Valuation</div>
+          <div className="text-sm text-text-secondary">Current EGO Valuation</div>
           <div className="text-xl font-bold text-white">
             ${currentValuation.toLocaleString(undefined, {
               minimumFractionDigits: 2,
@@ -356,7 +356,7 @@ function CreateDTF() {
 
         {/* Expiry Time Input */}
         <div>
-          <label className="block text-sm font-medium text-gray-300">DTF Expiry</label>
+          <label className="block text-sm font-medium text-gray-300">EGO Expiry</label>
           <input
             type="datetime-local"
             value={formData.expiryTime}
@@ -410,7 +410,7 @@ function CreateDTF() {
           {status.stage === 'approving' && 'Approving Tokens...'}
           {status.stage === 'creating' && 'Creating DTF...'}
           {status.stage === 'complete' && 'DTF Created!'}
-          {(status.stage === 'idle' || status.stage === 'error') && 'Launch DTF'}
+          {(status.stage === 'idle' || status.stage === 'error') && 'Launch EGO'}
         </button>
 
         {status.error && (

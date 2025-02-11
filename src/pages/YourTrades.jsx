@@ -6,6 +6,7 @@ import { formatUnits } from 'viem';
 import { Card, CardContent } from '@/components/ui/card';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { TrendingUp, TrendingDown, Clock, CheckCircle2, XCircle, Loader2 } from 'lucide-react';
+import { API_URL } from '../../config';
 
 function YourTrades() {
   const { trades, isLoading, refetch } = useUserTrades();
@@ -55,7 +56,7 @@ function YourTrades() {
       await publicClient.waitForTransactionReceipt({ hash });
       
       await fetch(
-        `http://localhost:3001/api/v1/trades/${address}/claim/${dtfId}`,
+          `${API_URL}/api/v1/trades/${address}/claim/${dtfId}`,
         {
           method: 'POST',
           headers: {
@@ -116,11 +117,11 @@ function YourTrades() {
     <div className="min-h-screen">
       <div className="max-w-7xl mx-auto px-4 py-8">
         <div className="flex items-center justify-between mb-8">
-          <h1 className="text-3xl font-bold text-white">Your Trades</h1>
+          <h1 className="text-3xl font-bold text-white">Your Shares</h1>
           <div className="grid grid-cols-4 gap-4">
             <Card className="bg-green-500/0 border-green-500/0 hover:bg-green-500/0 transition-all duration-200">
               <CardContent className="p-4">
-                <div className="text-sm text-green-500">Winning Trades</div>
+                <div className="text-sm text-green-500">Winning Shares</div>
                 <div className="text-2xl font-bold text-white mt-1">
                   {trades?.filter(t => 
                     t.status === 'Settled' && 
@@ -132,7 +133,7 @@ function YourTrades() {
             </Card>
             <Card className="bg-red-500/0 border-red-500/0 hover:bg-red-500/0 transition-all duration-200">
               <CardContent className="p-4">
-                <div className="text-sm text-red-500">Losing Trades</div>
+                <div className="text-sm text-red-500">Losing Shares</div>
                 <div className="text-2xl font-bold text-white mt-1">
                   {trades?.filter(t => 
                     t.status === 'Settled' && 
@@ -144,7 +145,7 @@ function YourTrades() {
             </Card>
             <Card className="bg-blue-500/0 border-blue-500/0 hover:bg-blue-500/0 transition-all duration-200">
               <CardContent className="p-4">
-                <div className="text-sm text-blue-500">Active Trades</div>
+                <div className="text-sm text-blue-500">Active Shares</div>
                 <div className="text-2xl font-bold text-white mt-1">
                   {trades?.filter(t => t.status !== 'Settled').length || 0}
                 </div>
@@ -245,8 +246,8 @@ function YourTrades() {
         ) : (
           <Card className="bg-black/30 border-white/5">
             <CardContent className="p-12 flex flex-col items-center justify-center">
-              <div className="text-xl font-medium text-gray-400">No trades found</div>
-              <p className="text-gray-500 mt-2">Start trading to see your positions here</p>
+              <div className="text-xl font-medium text-gray-400">No Shares found</div>
+              <p className="text-gray-500 mt-2">Start trading to see your shares here</p>
             </CardContent>
           </Card>
         )}

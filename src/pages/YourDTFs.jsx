@@ -6,6 +6,7 @@ import DTFMarket from '../contracts/abis/DTFMarket.json';
 import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent } from '@/components/ui/card';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
+import { API_URL } from '../../config';
 import { 
   TrendingUp, 
   TrendingDown, 
@@ -69,7 +70,7 @@ function DTFCreatorCard({ dtfId, address }) {
   const { data: feeData } = useQuery({
     queryKey: ['dtf-fees', dtfId.toString()],
     queryFn: async () => {
-      const response = await fetch(`http://localhost:3001/api/v1/dtfs/${dtfId.toString()}/fees`);
+      const response = await fetch(`${API_URL}/api/v1/dtfs/${dtfId.toString()}/fees`);
       if (!response.ok) throw new Error('Failed to fetch fee data');
       return response.json();
     },
@@ -312,7 +313,7 @@ function YourDTFs() {
       // Fetch data for all DTFs in parallel
       const results = await Promise.all(
         dtfIds.map(id => 
-          fetch(`http://localhost:3001/api/v1/dtfs/${id.toString()}/fees`)
+          fetch(`${API_URL}/api/v1/dtfs/${id.toString()}/fees`)
             .then(res => res.json())
             .catch(() => ({ creatorFees: 0, totalVolume: 0 }))
         )
@@ -356,7 +357,7 @@ function YourDTFs() {
       <div className="max-w-7xl mx-auto px-4 py-8">
         {/* Stats Header */}
         <div className="flex items-center justify-between mb-8">
-          <h1 className="text-3xl font-bold text-white">Your DTFs</h1>
+          <h1 className="text-3xl font-bold text-white">Your EGOs</h1>
           <div className="grid grid-cols-3 gap-4">
             <Card className="bg-green-500/0 border-green-500/0 hover:bg-green-500/0 transition-all duration-200">
               <CardContent className="p-4">

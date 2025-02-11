@@ -60,11 +60,11 @@ function Trading() {
             </div>
             <div>
               <div className="text-green-500 font-semibold">Market Trend: Bullish</div>
-              <div className="text-gray-400 text-sm">70% of DTFs trending upward</div>
+              <div className="text-gray-400 text-sm">70% of EGOs trending upward</div>
             </div>
           </div>
           <div className="text-right">
-            <div className="text-white font-semibold">Most Active: DTF #23</div>
+            <div className="text-white font-semibold">Most Active: EGO #23</div>
             <div className="text-gray-400 text-sm">$45.2k volume in last hour</div>
           </div>
         </div>
