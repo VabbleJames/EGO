@@ -8,7 +8,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { API_URL } from '../../config';
 import { ethers } from 'ethers';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Wallet } from 'lucide-react';
 import {
   TrendingUp,
   TrendingDown,
@@ -322,7 +322,8 @@ function YourDTFs() {
       "stateMutability": "view",
       "type": "function"
     }],
-    functionName: 'nextDtfId'
+    functionName: 'nextDtfId',
+    enabled: isConnected
   });
 
   // Stats tracking at the parent level
@@ -378,6 +379,23 @@ function YourDTFs() {
       }
     }
   }, [nextDtfId]);
+
+  if (!isConnected) {
+    return (
+      <div className="min-h-screen">
+        <div className="max-w-7xl mx-auto px-4 py-8">
+          <h1 className="text-3xl font-bold text-white mb-6">Your EGOs</h1>
+          <Card className="bg-black/30 border-white/5">
+            <CardContent className="p-12 flex flex-col items-center justify-center">
+              <Wallet className="w-12 h-12 text-gray-500 mb-4" />
+              <div className="text-xl font-medium text-gray-400">No EGOs Found</div>
+              <p className="text-gray-500 mt-2">Connect your wallet to get started</p>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
+  }
 
   // Calculate pagination values
   const totalPages = Math.ceil(dtfIds.length / itemsPerPage);
