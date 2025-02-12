@@ -108,7 +108,12 @@ module.exports = {
           },
           '100%': {
             opacity: '0',
-          },
+          }
+        },
+        'border-beam': {
+          '100%': {
+            'background-position-x': '200%'
+          }
         }
       },
       animation: {
@@ -116,6 +121,7 @@ module.exports = {
         'beam-y': 'grid-beam-y 3s ease-in-out 3s infinite',
         'gradient-slide': 'gradient-slide 2s linear infinite',
         'fade-out': 'fade-out 0.5s ease-out forwards',
+        'border-pulse': 'border-beam 3s linear infinite',
       }
     },
   },

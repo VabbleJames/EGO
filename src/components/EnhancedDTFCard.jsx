@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { useReadContract, useWriteContract } from 'wagmi';
+import React, { useState, useEffect } from 'react';
+import { useReadContract, useWriteContract, usePublicClient } from 'wagmi';
 import { SEPOLIA_CONTRACTS } from '../constants/addresses';
 import DTFMarket from '../contracts/abis/DTFMarket.json';
 import DTFPriceOracle from '../contracts/abis/DTFPriceOracle.json';
@@ -10,6 +10,12 @@ import BuySharesModal from './BuySharesModal';
 
 function EnhancedDTFCard({ dtfId }) {
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isSettling, setIsSettling] = useState(false);
+  const [localSettled, setLocalSettled] = useState(false);
+  const client = usePublicClient();
+  const [isYesPriceFlashing, setIsYesPriceFlashing] = useState(false);
+  const [isNoPriceFlashing, setIsNoPriceFlashing] = useState(false);
+  const [prevSharePrices, setPrevSharePrices] = useState(null);
 
   // Match the exact same contract calls as original
   const { data: dtf, isError, isLoading } = useReadContract({
@@ -40,7 +46,7 @@ function EnhancedDTFCard({ dtfId }) {
 
   const { writeContractAsync } = useWriteContract();
 
-  const { data: poolInfo } = useReadContract({
+  const { data: poolInfo, refetch: refetchPoolInfo } = useReadContract({
     address: SEPOLIA_CONTRACTS.DTF_MARKET,
     abi: DTFMarket,
     functionName: 'getDTFPoolInfo',
@@ -54,7 +60,7 @@ function EnhancedDTFCard({ dtfId }) {
     args: [dtfId]
   });
 
-  const { data: calculatedValuation } = useReadContract({
+  const { data: calculatedValuation, refetch: refetchValuation } = useReadContract({
     address: SEPOLIA_CONTRACTS.DTF_PRICE_ORACLE,
     abi: DTFPriceOracle,
     functionName: 'calculateValuation',
@@ -62,13 +68,27 @@ function EnhancedDTFCard({ dtfId }) {
     enabled: Boolean(lockedTokensData)
   });
 
-  const { data: sharePrices } = useReadContract({
+  const { data: sharePrices, refetch: refetchPrices } = useReadContract({
     address: SEPOLIA_CONTRACTS.DTF_MARKET,
     abi: DTFMarket,
     functionName: 'getSharePrices',
     args: [dtfId],
     enabled: Boolean(dtf)
   });
+
+  useEffect(() => {
+    if (sharePrices && prevSharePrices) {
+      if (sharePrices[0] !== prevSharePrices[0]) {
+        setIsYesPriceFlashing(true);
+        setTimeout(() => setIsYesPriceFlashing(false), 1000);
+      }
+      if (sharePrices[1] !== prevSharePrices[1]) {
+        setIsNoPriceFlashing(true);
+        setTimeout(() => setIsNoPriceFlashing(false), 1000);
+      }
+    }
+    setPrevSharePrices(sharePrices);
+  }, [sharePrices]);
 
   const getTokenSymbol = (address) => {
     const symbolEntry = Object.entries(SEPOLIA_CONTRACTS.TOKENS)
@@ -88,27 +108,12 @@ function EnhancedDTFCard({ dtfId }) {
   if (isError) {
     return (
       <div className="bg-card-dark rounded-lg p-4 border border-red-500">
-        <div className="text-red-500">Error loading DTF data</div>
+        <div className="text-red-500">Error loading EGO data</div>
       </div>
     );
   }
 
   const isExpired = Number(dtf[2]) < Math.floor(Date.now() / 1000);
-
-  const handleSettle = async () => {
-    try {
-      const hash = await writeContractAsync({
-        address: SEPOLIA_CONTRACTS.DTF_MARKET,
-        abi: DTFMarket,
-        functionName: 'settleDTF',
-        args: [dtfId]
-      });
-      console.log('Settlement transaction hash:', hash);
-    } catch (error) {
-      console.error('Error settling DTF:', error);
-    }
-  };
-
   const timeLeft = Number(dtf[2]) * 1000 - Date.now();
   const currentVal = calculatedValuation ? Number(formatUnits(calculatedValuation, 18)) : 0;
   const targetVal = Number(formatUnits(dtf[3], 18));
@@ -117,66 +122,121 @@ function EnhancedDTFCard({ dtfId }) {
     100
   );
 
+  const handleSettle = async () => {
+    try {
+      setIsSettling(true);
+      const hash = await writeContractAsync({
+        address: SEPOLIA_CONTRACTS.DTF_MARKET,
+        abi: DTFMarket,
+        functionName: 'settleDTF',
+        args: [dtfId]
+      });
+
+      console.log('Settlement transaction hash:', hash);
+
+      const receipt = await client.waitForTransactionReceipt({ hash });
+
+      if (receipt.status === 'success') {
+        setLocalSettled(true);
+      }
+    } catch (error) {
+      console.error('Error settling DTF:', error);
+    } finally {
+      setIsSettling(false);
+    }
+  };
+
+  const handleModalClose = async (wasSuccessful, wasYesPurchase) => {
+    setIsModalOpen(false);
+    
+    if (wasSuccessful) {
+      try {
+        setTimeout(async () => {
+          if (refetchPrices) await refetchPrices();
+          if (refetchPoolInfo) await refetchPoolInfo();
+          if (refetchValuation) await refetchValuation();
+  
+          if (wasYesPurchase) {
+            setIsYesPriceFlashing(true);
+            setTimeout(() => setIsYesPriceFlashing(false), 2000);
+          } else {
+            setIsNoPriceFlashing(true);
+            setTimeout(() => setIsNoPriceFlashing(false), 2000);
+          }
+        }, 500);
+      } catch (error) {
+        console.error('Error refreshing data:', error);
+      }
+    }
+  };
+
   return (
-    <div className="bg-[#000000] rounded-xl p-6 border border-white/20 hover:border-white/50">
+    <div className="relative group">
+      {/* Gradient border overlay */}
+      <div className="absolute -inset-[1px] rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-400 animate-border-pulse"
+        style={{
+          backgroundImage: 'linear-gradient(to right, rgba(217,217,217,0) 0%, rgba(234,128,81,1) 33%, rgba(234,128,81,1) 56%, rgba(93,27,154,1) 70%, rgba(115,115,115,0) 100%)',
+          backgroundSize: '200% 100%'
+        }}
+      />
+      <div className="bg-[#000000] rounded-xl p-6 relative z-10 border border-white/20 group-hover:border-transparent">
 
-      {/* Header with live price indicator */}
-      <div className="flex justify-between items-center mb-4">
-        <div className="flex items-center gap-3">
-          <img src="https://i.postimg.cc/KzJqMWPt/PNG-LOGO.png" alt="DTF Icon" className="w-12 h-1" />
-          <h3 className="text-xl font-bold">{dtf[1]}</h3>
-        </div>
-        <span className={`px-3 py-1 rounded-lg text-sm font-medium ${
-          dtf[5] ? 'bg-green-500' : 
-          isExpired ? 'bg-red-500' : 
-          'bg-[#2563EB]'
-        }`}>
-          {dtf[5] ? 'Settled' : isExpired ? 'Expired' : 'Active'}
-        </span>
-      </div>
-
-      {/* Volume */}
-      <div className="mb-4">
-        <span className="text-gray-400">Vol: </span>
-        <span className="text-[#22C55E]">
-          {poolInfo ? ((Number(poolInfo[2]) - (50 * (10 ** 6))) / (10 ** 6)).toFixed(2) : 'Loading...'} USDC
-        </span>
-      </div>
-
-      {/* Tokens */}
-      <div className="flex gap-4 mb-4">
-        {lockedTokensData && lockedTokensData[0].map((token, index) => (
-          <div key={index} className="flex items-center">
-            <div className="w-2 h-2 rounded-full bg-blue-500 mr-2"></div>
-            <span className="text-sm">
-              {formatUnits(lockedTokensData[1][index], 18)} {getTokenSymbol(token)}
-            </span>
+        {/* Header with live price indicator */}
+        <div className="flex justify-between items-center mb-4">
+          <div className="flex items-center gap-3">
+            <img src="https://i.postimg.cc/3NQsM03B/SVG-Logo-EGO.png" alt="DTF Icon" className="w-20 h-20" />
+            <h3 className="text-xl font-bold">{dtf[1]}</h3>
           </div>
-        ))}
-      </div>
-
-      {/* Progress and Values */}
-      <div className="space-y-4 mb-4">
-        {/* Time remaining */}
-        <div>
-          <div className="flex justify-between text-sm mb-1">
-            <span className="text-gray-400 flex items-center gap-1">
-              <Clock size={14} />
-              Time Remaining
-            </span>
-            <span className="text-white">
-              {Math.max(0, Math.floor(timeLeft / (1000 * 60 * 60)))}h {Math.max(0, Math.floor((timeLeft / (1000 * 60)) % 60))}m
-            </span>
-          </div>
-          <div className="w-full bg-gray-800 rounded-full h-2">
-            <div 
-              className="bg-blue-500 rounded-full h-2 transition-all"
-              style={{ width: `${Math.max(0, (timeLeft / (24 * 60 * 60 * 1000)) * 100)}%` }}
-            />
-          </div>
+          <span className={`px-3 py-1 rounded-lg text-sm font-medium ${dtf[5] ? 'bg-green-500' :
+            isExpired ? 'bg-red-500' :
+              'bg-[#2563EB]'
+            }`}>
+            {dtf[5] ? 'Settled' : isExpired ? 'Expired' : 'Active'}
+          </span>
         </div>
 
-        {/* Progress to target 
+        {/* Volume */}
+        <div className="mb-4">
+          <span className="text-gray-400">Vol: </span>
+          <span className="text-[#22C55E]">
+            {poolInfo ? ((Number(poolInfo[2]) - (50 * (10 ** 6))) / (10 ** 6)).toFixed(2) : 'Loading...'} USDC
+          </span>
+        </div>
+
+        {/* Tokens */}
+        <div className="flex gap-4 mb-4">
+          {lockedTokensData && lockedTokensData[0].map((token, index) => (
+            <div key={index} className="flex items-center">
+              <div className="w-2 h-2 rounded-full bg-blue-500 mr-2"></div>
+              <span className="text-sm">
+                {formatUnits(lockedTokensData[1][index], 18)} {getTokenSymbol(token)}
+              </span>
+            </div>
+          ))}
+        </div>
+
+        {/* Progress and Values */}
+        <div className="space-y-4 mb-4">
+          {/* Time remaining */}
+          <div>
+            <div className="flex justify-between text-sm mb-1">
+              <span className="text-gray-400 flex items-center gap-1">
+                <Clock size={14} />
+                Time Remaining
+              </span>
+              <span className="text-white">
+                {Math.max(0, Math.floor(timeLeft / (1000 * 60 * 60)))}h {Math.max(0, Math.floor((timeLeft / (1000 * 60)) % 60))}m
+              </span>
+            </div>
+            <div className="w-full bg-gray-800 rounded-full h-2">
+              <div
+                className="bg-blue-500 rounded-full h-2 transition-all"
+                style={{ width: `${Math.max(0, (timeLeft / (24 * 60 * 60 * 1000)) * 100)}%` }}
+              />
+            </div>
+          </div>
+
+          {/* Progress to target 
         <div>
           <div className="flex justify-between text-sm mb-1">
             <span className="text-gray-400 flex items-center gap-1">
@@ -192,79 +252,104 @@ function EnhancedDTFCard({ dtfId }) {
             />
           </div> 
         </div> */}
-      </div> 
+        </div>
 
-      {/* Values */}
-      <div className="space-y-1 mb-4">
-        <div>
-          <span className="text-gray-400">Real Time Value: </span>
-          <span className="text-white">
-            ${calculatedValuation ? Number(formatUnits(calculatedValuation, 18)).toFixed(2) : 'Loading...'}
-          </span>
+        {/* Values */}
+        <div className="space-y-1 mb-4">
+          <div>
+            <span className="text-gray-400">Real Time Value: </span>
+            <span className="text-white">
+              ${calculatedValuation ? Number(formatUnits(calculatedValuation, 18)).toFixed(2) : 'Loading...'}
+            </span>
+          </div>
+          <div>
+            <span className="text-gray-400">Target Value: </span>
+            <span className="text-white">
+              ${Number(formatUnits(dtf[3], 18)).toFixed(2)} {dtf[4] ? 'or higher' : 'or lower'}
+            </span>
+          </div>
         </div>
-        <div>
-          <span className="text-gray-400">Target Value: </span>
-          <span className="text-white">
-            ${Number(formatUnits(dtf[3], 18)).toFixed(2)} {dtf[4] ? 'or higher' : 'or lower'}
-          </span>
+
+        {/* Price Bars */}
+        <div className="space-y-2 mb-4">
+          <div>
+            <div className="flex justify-between text-sm mb-1">
+              <span>Yes</span>
+              <span
+                className={`transition-colors duration-300 ${isYesPriceFlashing ? 'text-green-400' : ''
+                  }`}
+              >
+                ${sharePrices ? Number(sharePrices[0]) / (10 ** 6) : 'Loading...'}
+              </span>
+            </div>
+            <div className="w-full bg-gray-700 rounded-full h-2">
+              <div
+                className={`${isYesPriceFlashing ? 'animate-pulse' : ''
+                  } bg-green-500 rounded-full h-2 transition-all duration-300`}
+                style={{
+                  width: `${sharePrices ? (Number(sharePrices[0]) / (10 ** 6) * 100) : 0}%`
+                }}
+              />
+            </div>
+          </div>
+          <div>
+            <div className="flex justify-between text-sm mb-1">
+              <span>No</span>
+              <span
+                className={`transition-colors duration-300 ${isNoPriceFlashing ? 'text-red-400' : ''
+                  }`}
+              >
+                ${sharePrices ? Number(sharePrices[1]) / (10 ** 6) : 'Loading...'}
+              </span>
+            </div>
+            <div className="w-full bg-gray-700 rounded-full h-2">
+              <div
+                className={`${isNoPriceFlashing ? 'animate-pulse' : ''
+                  } bg-red-500 rounded-full h-2 transition-all duration-300`}
+                style={{
+                  width: `${sharePrices ? (Number(sharePrices[1]) / (10 ** 6) * 100) : 0}%`
+                }}
+              />
+            </div>
+          </div>
         </div>
+
+        {/* Buy/Settle Button */}
+        {dtf[5] || localSettled ? (
+          <button
+            disabled
+            className="w-full py-3 bg-gray-600 rounded-lg transition-colors cursor-not-allowed text-gray-300"
+          >
+            EGO Settled
+          </button>
+        ) : isExpired ? (
+          <button
+            onClick={handleSettle}
+            disabled={isSettling}
+            className={`w-full py-3 ${isSettling
+              ? 'bg-gray-500 cursor-not-allowed'
+              : 'bg-red-500 hover:bg-red-600'
+              } rounded-lg transition-colors`}
+          >
+            {isSettling ? 'EGO Settling...' : 'Settle EGO'}
+          </button>
+        ) : (
+          <button
+            onClick={() => setIsModalOpen(true)}
+            className="w-full py-3 bg-[#22C55E] hover:bg-[#16A34A] rounded-lg transition-colors"
+          >
+            Buy Shares
+          </button>
+        )}
+
+        {/* Buy Shares Modal */}
+        <BuySharesModal
+          dtf={dtf}
+          dtfId={dtfId}
+          isOpen={isModalOpen}
+          onClose={handleModalClose}
+        />
       </div>
-
-      {/* Price Bars */}
-      <div className="space-y-2 mb-4">
-        <div>
-          <div className="flex justify-between text-sm mb-1">
-            <span>Yes</span>
-            <span>${sharePrices ? Number(sharePrices[0]) / (10 ** 6) : 'Loading...'}</span>
-          </div>
-          <div className="w-full bg-gray-700 rounded-full h-2">
-            <div className="bg-green-500 rounded-full h-2"
-              style={{ width: `${sharePrices ? (Number(sharePrices[0]) / (10 ** 6) * 100) : 0}%` }} />
-          </div>
-        </div>
-        <div>
-          <div className="flex justify-between text-sm mb-1">
-            <span>No</span>
-            <span>${sharePrices ? Number(sharePrices[1]) / (10 ** 6) : 'Loading...'}</span>
-          </div>
-          <div className="w-full bg-gray-700 rounded-full h-2">
-            <div className="bg-red-500 rounded-full h-2"
-              style={{ width: `${sharePrices ? (Number(sharePrices[1]) / (10 ** 6) * 100) : 0}%` }} />
-          </div>
-        </div>
-      </div>
-
-      {/* Buy/Settle Button */}
-      {dtf[5] ? (
-        <button
-          disabled
-          className="w-full py-3 bg-gray-600 rounded-lg transition-colors cursor-not-allowed text-gray-300"
-        >
-          EGO Settled
-        </button>
-      ) : isExpired ? (
-        <button
-          onClick={handleSettle}
-          className="w-full py-3 bg-red-500 hover:bg-red-600 rounded-lg transition-colors"
-        >
-          Settle EGO
-        </button>
-      ) : (
-        <button
-          onClick={() => setIsModalOpen(true)}
-          className="w-full py-3 bg-[#22C55E] hover:bg-[#16A34A] rounded-lg transition-colors"
-        >
-          Buy Shares
-        </button>
-      )}
-
-      {/* Buy Shares Modal */}
-      <BuySharesModal
-        dtf={dtf}
-        dtfId={dtfId}
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-      />
     </div>
   );
 }

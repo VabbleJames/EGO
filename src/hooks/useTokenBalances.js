@@ -24,11 +24,16 @@ export function useTokenBalances(address) {
         args: [address],
       },
     ],
+    // Enable only when we have an address
+    enabled: Boolean(address),
   });
 
+  // Debug log to see the structure
+  console.log('Raw balance data:', balances);
+
   return {
-    USDC: balances?.[0] || 0n,
-    LINK: balances?.[1] || 0n,
-    AAVE: balances?.[2] || 0n,
+    USDC: balances?.[0]?.result || 0n,
+    LINK: balances?.[1]?.result || 0n,
+    AAVE: balances?.[2]?.result || 0n,
   };
 }

@@ -19,6 +19,7 @@ function CreateDTF() {
   const { address } = useAccount();
   const balances = useTokenBalances(address);
   const { createDTF, status, isConnected } = useCreateDTF();
+  const [isProcessing, setIsProcessing] = useState(false);
 
   // Main form data state
   const [formData, setFormData] = useState({
@@ -91,14 +92,24 @@ function CreateDTF() {
       const symbol = getTokenSymbol(tokenAddress);
       if (!symbol) return '0';
 
+      // Safely access balance using the new structure
       const balance = balances[symbol];
       if (!balance) return '0';
 
       const decimals = TOKEN_CONFIG[symbol].decimals;
       const formatted = formatUnits(balance, decimals);
-      return Number(formatted).toFixed(6);
+
+      // Debug log
+      console.log('Token balance check:', {
+        symbol,
+        balance,
+        formatted,
+        decimals
+      });
+
+      return formatted;
     } catch (error) {
-      console.error('Error formatting balance:', error);
+      console.error('Error getting token balance:', error);
       return '0';
     }
   };
@@ -108,14 +119,19 @@ function CreateDTF() {
     if (!tokenAddress || !amount) return '';
 
     const symbol = getTokenSymbol(tokenAddress);
-    if (!symbol) return '';
+    if (!symbol || !balances[symbol]) return '';
 
     const balance = balances[symbol];
-    if (!balance) return '';
-
     const decimals = TOKEN_CONFIG[symbol].decimals;
     const userBalance = Number(formatUnits(balance, decimals));
     const enteredAmount = Number(amount);
+
+    console.log('Validation check:', {
+      symbol,
+      balance,
+      userBalance,
+      enteredAmount
+    });
 
     if (enteredAmount > userBalance) {
       return `Insufficient balance. You have ${userBalance.toFixed(6)} ${symbol} available`;
@@ -259,10 +275,20 @@ function CreateDTF() {
       return;
     }
 
+    setIsProcessing(true);
     try {
       await createDTF(formData);
     } catch (error) {
-      console.error('Launch failed:', error);
+      // Check if error is user rejection
+      if (error.code === 4001 || // MetaMask user rejected
+        error.message?.includes('User rejected') ||
+        error.message?.includes('User denied')) {
+        console.log('Transaction cancelled by user');
+      } else {
+        console.error('Launch failed:', error);
+      }
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -272,163 +298,163 @@ function CreateDTF() {
 
       <div className="bg-black rounded-xl p-6 border border-white/20">
 
-      <form onSubmit={handleLaunch} className="space-y-6">
+        <form onSubmit={handleLaunch} className="space-y-6">
 
-        {/* DTF Name Input */}
-        <div>
-          <label className="block text-sm font-medium text-gray-300">EGO Name</label>
-          <input
-            type="text"
-            value={formData.name}
-            onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
-            className="mt-1 block w-full p-2 bg-card-dark border border-white/20 rounded-md text-text-primary"
-            placeholder="Enter EGO name"
-            required
-          />
-        </div>
-
-        {/* Token Selection Section */}
-        <div>
-          <label className="block text-sm font-medium text-gray-300 mb-2">
-            Tokens (minimum 2 required)
-          </label>
-          {fieldErrors.tokenAmounts?.general && (
-            <p className="text-red-500 text-sm mb-2">{fieldErrors.tokenAmounts.general}</p>
-          )}
-          {formData.tokens.map((token, index) => (
-            <div key={index} className="flex gap-4 mb-4">
-              <div className="flex-1">
-                <select
-                  value={token.address}
-                  onChange={(e) => updateToken(index, 'address', e.target.value)}
-                  className={`w-full p-2 bg-card-dark border border-white/20  ${fieldErrors.tokenAmounts[index] ? 'border-red-500' : ''} rounded-md text-white`}
-                >
-                  <option value="">Select Token</option>
-                  {Object.entries(SEPOLIA_CONTRACTS.TOKENS).map(([symbol, address]) => (
-                    <option key={address} value={address}>
-                      {symbol}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="flex-1">
-                <input
-                  type="number"
-                  value={token.amount}
-                  onChange={(e) => updateToken(index, 'amount', e.target.value)}
-                  className={`w-full p-2 bg-card-dark border border-white/20  ${fieldErrors.tokenAmounts[index] ? 'border-red-500' : 'border-dark-border'} rounded-md text-white`}
-                  placeholder="Amount"
-                />
-                {token.address && (
-                  <div className="text-sm mt-1">
-                    <div className="text-gray-400">
-                      Available: {getTokenBalance(token.address)} {getTokenSymbol(token.address)}
-                    </div>
-                    {fieldErrors.tokenAmounts[index] && (
-                      <div className="text-red-500">
-                        {fieldErrors.tokenAmounts[index]}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
-          ))}
-          <button
-            type="button"
-            onClick={addToken}
-            className="text-sm text-blue-500 hover:text-blue-400"
-          >
-            + Add another token
-          </button>
-        </div>
-
-        {/* Current Valuation Display */}
-        <div className="p-4 bg-card-dark rounded-md border border-white/20">
-          <div className="text-sm text-text-secondary">Current EGO Valuation</div>
-          <div className="text-xl font-bold text-white">
-            ${currentValuation.toLocaleString(undefined, {
-              minimumFractionDigits: 2,
-              maximumFractionDigits: 2
-            })}
-          </div>
-        </div>
-
-        {/* Expiry Time Input */}
-        <div>
-          <label className="block text-sm font-medium text-gray-300">EGO Expiry</label>
-          <input
-            type="datetime-local"
-            value={formData.expiryTime}
-            onChange={handleExpiryChange}
-            min={new Date(Date.now() + 5 * 60 * 1000).toISOString().slice(0, 16)}
-            className={`mt-1 block w-full p-2 bg-card-dark border border-white/20 ${fieldErrors.expiryTime ? 'border-red-500' : 'border-dark-border'} rounded-md text-white`}
-          />
-          <p className={`text-sm mt-3 ${fieldErrors.expiryTime ? 'text-red-500' : 'text-gray-400'}`}>
-            {fieldErrors.expiryTime || 'Minimum 5 minutes from now'}
-          </p>
-        </div>
-
-        {/* Target Valuation Input */}
-        <div>
-          <label className="block text-sm font-medium text-gray-300">Target Valuation</label>
-          <div className="flex items-center gap-4">
+          {/* DTF Name Input */}
+          <div>
+            <label className="block text-sm font-medium text-gray-300">EGO Name</label>
             <input
-              type="number"
-              value={formData.targetValuation}
-              onChange={handleTargetValuationChange}
-              className={`mt-1 block w-full p-2 bg-card-dark border border-white/20 ${fieldErrors.targetValuation ? 'border-red-500' : 'border-dark-border'} rounded-md text-white`}
-              placeholder="Enter target value"
+              type="text"
+              value={formData.name}
+              onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
+              className="mt-1 block w-full p-2 bg-card-dark border border-white/20 rounded-md text-text-primary"
+              placeholder="Enter EGO name"
+              required
             />
-            <select
-              value={formData.isTargetHigher}
-              onChange={(e) => {
-                setFormData(prev => ({ ...prev, isTargetHigher: e.target.value === 'true' }));
-                const error = validateTargetValuation(formData.targetValuation);
-                setFieldErrors(prev => ({ ...prev, targetValuation: error }));
-              }}
-              className="mt-1 block w-40 p-2 bg-card-dark  border-dark-border rounded-md text-white border border-white/20"
-            >
-              <option value="true">Higher</option>
-              <option value="false">Lower</option>
-            </select>
           </div>
-          <p className={`text-sm mt-3 ${fieldErrors.targetValuation ? 'text-red-500' : 'text-gray-400'}`}>
-            {fieldErrors.targetValuation || `Must be at least 5% ${formData.isTargetHigher ? 'higher' : 'lower'} than current valuation`}
-          </p>
-        </div>
 
-        {/* Submit Button and Status Display */}
-        <button
-          type="submit"
-          disabled={status.stage !== 'idle' && status.stage !== 'error'}
-          className={`w-full py-3 px-4 ${status.stage !== 'idle' ? 'bg-gray-500' : 'bg-blue-600'
-            } rounded-md text-white`}
-          onClick={handleLaunch}
-        >
-          {status.stage === 'checking' && 'Checking Allowances...'}
-          {status.stage === 'approving' && 'Approving Tokens...'}
-          {status.stage === 'creating' && 'Creating DTF...'}
-          {status.stage === 'complete' && 'DTF Created!'}
-          {(status.stage === 'idle' || status.stage === 'error') && 'Launch EGO'}
-        </button>
-
-        {status.error && (
-          <div className="text-red-500 mt-2">{status.error}</div>
-        )}
-
-        {status.transactions.length > 0 && (
-          <div className="mt-4">
-            <h3>Transactions:</h3>
-            {status.transactions.map((tx, i) => (
-              <div key={i} className="text-sm text-text-secondary">
-                {tx.type === 'approval' ? 'Token Approval' : 'DTF Creation'}: {tx.hash}
+          {/* Token Selection Section */}
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2">
+              Tokens (minimum 2 required)
+            </label>
+            {fieldErrors.tokenAmounts?.general && (
+              <p className="text-red-500 text-sm mb-2">{fieldErrors.tokenAmounts.general}</p>
+            )}
+            {formData.tokens.map((token, index) => (
+              <div key={index} className="flex gap-4 mb-4">
+                <div className="flex-1">
+                  <select
+                    value={token.address}
+                    onChange={(e) => updateToken(index, 'address', e.target.value)}
+                    className={`w-full p-2 bg-card-dark border border-white/20  ${fieldErrors.tokenAmounts[index] ? 'border-red-500' : ''} rounded-md text-white`}
+                  >
+                    <option value="">Select Token</option>
+                    {Object.entries(SEPOLIA_CONTRACTS.TOKENS).map(([symbol, address]) => (
+                      <option key={address} value={address}>
+                        {symbol}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex-1">
+                  <input
+                    type="number"
+                    value={token.amount}
+                    onChange={(e) => updateToken(index, 'amount', e.target.value)}
+                    className={`w-full p-2 bg-card-dark border border-white/20  ${fieldErrors.tokenAmounts[index] ? 'border-red-500' : 'border-dark-border'} rounded-md text-white`}
+                    placeholder="Amount"
+                  />
+                  {token.address && (
+                    <div className="text-sm mt-1">
+                      <div className="text-gray-400">
+                        Available: {getTokenBalance(token.address)} {getTokenSymbol(token.address)}
+                      </div>
+                      {fieldErrors.tokenAmounts[index] && (
+                        <div className="text-red-500">
+                          {fieldErrors.tokenAmounts[index]}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
             ))}
+            <button
+              type="button"
+              onClick={addToken}
+              className="text-sm text-blue-500 hover:text-blue-400"
+            >
+              + Add another token
+            </button>
           </div>
-        )}
-      </form>
-    </div>
+
+          {/* Current Valuation Display */}
+          <div className="p-4 bg-card-dark rounded-md border border-white/20">
+            <div className="text-sm text-text-secondary">Current EGO Valuation</div>
+            <div className="text-xl font-bold text-white">
+              ${currentValuation.toLocaleString(undefined, {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+              })}
+            </div>
+          </div>
+
+          {/* Expiry Time Input */}
+          <div>
+            <label className="block text-sm font-medium text-gray-300">EGO Expiry</label>
+            <input
+              type="datetime-local"
+              value={formData.expiryTime}
+              onChange={handleExpiryChange}
+              min={new Date(Date.now() + 5 * 60 * 1000).toISOString().slice(0, 16)}
+              className={`mt-1 block w-full p-2 bg-card-dark border border-white/20 ${fieldErrors.expiryTime ? 'border-red-500' : 'border-dark-border'} rounded-md text-white`}
+            />
+            <p className={`text-sm mt-3 ${fieldErrors.expiryTime ? 'text-red-500' : 'text-gray-400'}`}>
+              {fieldErrors.expiryTime || 'Minimum 5 minutes from now'}
+            </p>
+          </div>
+
+          {/* Target Valuation Input */}
+          <div>
+            <label className="block text-sm font-medium text-gray-300">Target Valuation</label>
+            <div className="flex items-center gap-4">
+              <input
+                type="number"
+                value={formData.targetValuation}
+                onChange={handleTargetValuationChange}
+                className={`mt-1 block w-full p-2 bg-card-dark border border-white/20 ${fieldErrors.targetValuation ? 'border-red-500' : 'border-dark-border'} rounded-md text-white`}
+                placeholder="Enter target value"
+              />
+              <select
+                value={formData.isTargetHigher}
+                onChange={(e) => {
+                  setFormData(prev => ({ ...prev, isTargetHigher: e.target.value === 'true' }));
+                  const error = validateTargetValuation(formData.targetValuation);
+                  setFieldErrors(prev => ({ ...prev, targetValuation: error }));
+                }}
+                className="mt-1 block w-40 p-2 bg-card-dark  border-dark-border rounded-md text-white border border-white/20"
+              >
+                <option value="true">Higher</option>
+                <option value="false">Lower</option>
+              </select>
+            </div>
+            <p className={`text-sm mt-3 ${fieldErrors.targetValuation ? 'text-red-500' : 'text-gray-400'}`}>
+              {fieldErrors.targetValuation || `Must be at least 5% ${formData.isTargetHigher ? 'higher' : 'lower'} than current valuation`}
+            </p>
+          </div>
+
+          {/* Submit Button and Status Display */}
+          <button
+            type="submit"
+            disabled={status.stage !== 'idle' && status.stage !== 'error' && isProcessing}
+            className={`w-full py-3 px-4 ${status.stage !== 'idle' ? 'bg-gray-500' : 'bg-blue-600 hover:bg-blue-700'
+              } rounded-md text-white`}
+            onClick={handleLaunch}
+          >
+            {status.stage === 'checking' && 'Checking Allowances...'}
+            {status.stage === 'approving' && 'Approving Tokens...'}
+            {status.stage === 'creating' && 'Creating DTF...'}
+            {status.stage === 'complete' && 'DTF Created!'}
+            {(status.stage === 'idle' || status.stage === 'error') && 'Launch EGO'}
+          </button>
+
+          {status.error && !status.error.includes('User denied') && (
+            <div className="text-red-500 mt-2">{status.error}</div>
+          )}
+
+          {status.transactions.length > 0 && (
+            <div className="mt-4">
+              <h3>Transactions:</h3>
+              {status.transactions.map((tx, i) => (
+                <div key={i} className="text-sm text-text-secondary">
+                  {tx.type === 'approval' ? 'Token Approval' : 'DTF Creation'}: {tx.hash}
+                </div>
+              ))}
+            </div>
+          )}
+        </form>
+      </div>
     </div>
   );
 }

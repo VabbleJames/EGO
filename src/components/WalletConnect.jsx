@@ -30,7 +30,7 @@ function WalletConnect() {
             {(() => {
               if (!connected) {
                 return (
-                  <button 
+                  <button
                     onClick={openConnectModal}
                     className="px-4 py-2 bg-dark rounded-lg text-gray-300 hover:bg-dark-border"
                   >
@@ -52,11 +52,8 @@ function WalletConnect() {
                     onClick={openAccountModal}
                     className="px-4 py-2 bg-dark rounded-lg text-gray-300 hover:bg-dark-border"
                   >
-                    {account.displayBalance
-                      ? `${account.displayBalance}`
-                      : ''
-                    }
-                    {account.displayName}
+                    <span className="mr-4">{account.displayBalance}</span>
+                    <span>{account.displayName}</span>
                   </button>
                 </>
               );

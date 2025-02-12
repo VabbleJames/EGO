@@ -10,7 +10,7 @@ import DTFMarket from '../contracts/abis/DTFMarket.json';
 function BuySharesModal({ dtf, isOpen, onClose, dtfId }) {
   // 1. Hooks and state declarations
   const { address } = useAccount();
-  const { data: usdcBalance } = useTokenBalances(address);
+  const  balances  = useTokenBalances(address);
   const [shareAmount, setShareAmount] = useState('');
   const [isYes, setIsYes] = useState(true);
   const [isApproving, setIsApproving] = useState(false);
@@ -33,6 +33,7 @@ function BuySharesModal({ dtf, isOpen, onClose, dtfId }) {
   const calculateUSDCCost = (shares) => {
     if (!shares || !sharePrices) return 0;
     const price = isYes ? sharePrices[0] : sharePrices[1];
+    if (!price) return 0;
     return (Number(shares) * (Number(price) / (10 ** 6)));
   };
 
@@ -108,40 +109,40 @@ function BuySharesModal({ dtf, isOpen, onClose, dtfId }) {
 
   const handleBuy = async () => {
     if (!shareAmount || isBuying || !hasAllowance) return;
-
+  
     try {
       setIsBuying(true);
-
-      // Parse share amount to proper decimals
       const shareAmountBigInt = parseUnits(shareAmount, 18);
-
-      // Execute the buy shares transaction
+  
       const hash = await writeContractAsync({
         address: SEPOLIA_CONTRACTS.DTF_MARKET,
         abi: DTFMarket,
         functionName: 'buyShares',
         args: [
-          dtfId,          // DTF ID
-          isYes,          // Whether buying YES shares
-          shareAmountBigInt  // Amount of shares to buy
+          dtfId,          
+          isYes,          
+          shareAmountBigInt  
         ]
       });
-
-      console.log('Buy transaction hash:', hash);
+  
       await client.waitForTransactionReceipt({ hash });
-      onClose();
-
+      
+      // Pass both success and purchase type back to parent
+      onClose(true, isYes);
+  
     } catch (error) {
       console.error('Error buying shares:', error);
+      onClose(false, false);
     } finally {
       setIsBuying(false);
     }
   };
+
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="bg-[#0A0A0A] border border-white/5 p-6 rounded-xl max-w-md mx-auto">
         <h2 className="text-2xl font-bold text-white mb-6">
-          Purchase DTF {dtf?.[1]} Shares
+          Purchase {dtf?.[1]} Shares
         </h2>
 
         {/* YES/NO Selection */}
@@ -179,7 +180,7 @@ function BuySharesModal({ dtf, isOpen, onClose, dtfId }) {
             placeholder="0"
           />
           <div className="text-right text-gray-400 mt-2">
-            Your Balance: ${formatUnits(usdcBalance?.USDC || 0n, 6)} USDC
+          Your Balance: ${balances?.USDC ? formatUnits(balances.USDC, 6) : '0.00'} USDC
           </div>
         </div>
 

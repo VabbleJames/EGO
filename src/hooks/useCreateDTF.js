@@ -127,12 +127,27 @@ export const useCreateDTF = () => {
 
       return receipt;
     } catch (error) {
-      console.error("DTF Creation error:", error);
-      setStatus({
-        stage: 'error',
-        error: error.message || 'Failed to create DTF',
-        transactions: []
-      });
+      // Check if the error is a user rejection
+      if (error.code === 4001 || 
+          error.message?.includes('User rejected') || 
+          error.message?.includes('User denied') ||
+          error.message?.includes('rejected transaction')) {
+        // Reset the status without error for user rejections
+        setStatus({
+          stage: 'idle',
+          error: null,
+          transactions: []
+        });
+        console.log('Transaction cancelled by user');
+      } else {
+        // Set error state for real errors
+        console.error("DTF Creation error:", error);
+        setStatus({
+          stage: 'error',
+          error: error.message || 'Failed to create DTF',
+          transactions: []
+        });
+      }
       throw error;
     }
   }, [isConnected, address, writeContractAsync, client]);

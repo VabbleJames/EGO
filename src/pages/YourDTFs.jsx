@@ -7,11 +7,13 @@ import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent } from '@/components/ui/card';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { API_URL } from '../../config';
-import { 
-  TrendingUp, 
-  TrendingDown, 
-  Timer, 
-  CheckCircle, 
+import { ethers } from 'ethers';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
+import {
+  TrendingUp,
+  TrendingDown,
+  Timer,
+  CheckCircle,
   AlertCircle,
   Loader2,
   DollarSign,
@@ -25,6 +27,7 @@ function DTFCreatorCard({ dtfId, address }) {
   const [isWithdrawing, setIsWithdrawing] = useState(false);
   const [withdrawalComplete, setWithdrawalComplete] = useState(false);
   const [showWithdrawConfirm, setShowWithdrawConfirm] = useState(false);
+  const [transactionStatus, setTransactionStatus] = useState('idle');
 
   const getTokenSymbol = (address) => {
     const symbolEntry = Object.entries(SEPOLIA_CONTRACTS.TOKENS)
@@ -90,7 +93,19 @@ function DTFCreatorCard({ dtfId, address }) {
       });
 
       console.log('Withdrawal transaction hash:', hash);
-      setWithdrawalComplete(true);
+
+      // Wait for the transaction confirmation
+      const provider = await window.ethereum;
+      const web3Provider = new ethers.BrowserProvider(provider);
+
+      // Show "Withdrawing..." while waiting for confirmation
+      const receipt = await web3Provider.waitForTransaction(hash);
+
+      if (receipt.status === 1) {
+        // Only mark as complete if transaction was successful
+        setWithdrawalComplete(true);
+      }
+
     } catch (error) {
       console.error('Error withdrawing tokens:', error);
     } finally {
@@ -126,12 +141,12 @@ function DTFCreatorCard({ dtfId, address }) {
               </div>
             </div>
             <div className={`px-3 py-1 rounded-full text-sm font-medium flex items-center gap-2
-              ${dtf[5] ? 'bg-green-500/10 text-green-500' : 
-                isExpired ? 'bg-red-500/10 text-red-500' : 
-                'bg-blue-500/10 text-blue-500'}`}>
+              ${dtf[5] ? 'bg-green-500/10 text-green-500' :
+                isExpired ? 'bg-red-500/10 text-red-500' :
+                  'bg-blue-500/10 text-blue-500'}`}>
               {dtf[5] ? <CheckCircle className="w-4 h-4" /> :
                 isExpired ? <AlertCircle className="w-4 h-4" /> :
-                <Timer className="w-4 h-4" />}
+                  <Timer className="w-4 h-4" />}
               {dtf[5] ? 'Settled' : isExpired ? 'Expired' : 'Active'}
             </div>
           </div>
@@ -177,8 +192,8 @@ function DTFCreatorCard({ dtfId, address }) {
                     </span>
                   </div>
                 </div>
-                {dtf[4] ? 
-                  <TrendingUp className="w-5 h-5 text-green-500" /> : 
+                {dtf[4] ?
+                  <TrendingUp className="w-5 h-5 text-green-500" /> :
                   <TrendingDown className="w-5 h-5 text-red-500" />}
               </div>
             </div>
@@ -188,10 +203,10 @@ function DTFCreatorCard({ dtfId, address }) {
                 <div>
                   <div className="text-sm text-gray-400">Time {dtf[5] ? 'Ended' : 'Remaining'}</div>
                   <div className="text-lg font-semibold text-white mt-1">
-                    {dtf[5] ? 
+                    {dtf[5] ?
                       new Date(Number(dtf[2]) * 1000).toLocaleString() :
                       isExpired ? 'Expired' :
-                      `${days}d ${hours}h ${minutes}m`}
+                        `${days}d ${hours}h ${minutes}m`}
                   </div>
                 </div>
                 <Clock className="w-5 h-5 text-blue-500" />
@@ -219,25 +234,35 @@ function DTFCreatorCard({ dtfId, address }) {
           {/* Withdrawal Section */}
           {dtf[5] && (
             <div className="mt-4">
-              {dtf[6] ? (
+              {dtf[6] || withdrawalComplete ? (
                 <div className="flex items-center justify-center gap-2 text-green-500 bg-green-500/5 rounded-lg p-3">
                   <CheckCircle className="w-5 h-5" />
                   <span>Withdrawal complete</span>
                 </div>
               ) : (
-                <button 
+                <button
                   onClick={() => setShowWithdrawConfirm(true)}
-                  disabled={isWithdrawing}
+                  disabled={isWithdrawing || transactionStatus !== 'idle'}
                   className={`w-full px-4 py-3 rounded-lg flex items-center justify-center gap-2
-                    ${isWithdrawing 
-                      ? 'bg-gray-500/50 cursor-not-allowed' 
+          ${isWithdrawing || transactionStatus !== 'idle'
+                      ? 'bg-gray-500/50 cursor-not-allowed'
                       : 'bg-green-500 hover:bg-green-600'
                     } text-white font-medium transition-colors`}
                 >
-                  {isWithdrawing ? (
+                  {transactionStatus === 'withdrawing' ? (
                     <>
                       <Loader2 className="w-5 h-5 animate-spin" />
-                      Withdrawing...
+                      Withdrawing Tokens...
+                    </>
+                  ) : transactionStatus === 'confirming' ? (
+                    <>
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                      Confirming Transaction...
+                    </>
+                  ) : transactionStatus === 'completed' ? (
+                    <>
+                      <CheckCircle className="w-5 h-5" />
+                      Withdrawal Complete
                     </>
                   ) : (
                     <>
@@ -284,6 +309,8 @@ function DTFCreatorCard({ dtfId, address }) {
 function YourDTFs() {
   const [dtfIds, setDtfIds] = useState([]);
   const { address, isConnected } = useAccount();
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 9;
 
   // Get total number of DTFs
   const { data: nextDtfId } = useReadContract({
@@ -312,7 +339,7 @@ function YourDTFs() {
     try {
       // Fetch data for all DTFs in parallel
       const results = await Promise.all(
-        dtfIds.map(id => 
+        dtfIds.map(id =>
           fetch(`${API_URL}/api/v1/dtfs/${id.toString()}/fees`)
             .then(res => res.json())
             .catch(() => ({ creatorFees: 0, totalVolume: 0 }))
@@ -346,11 +373,50 @@ function YourDTFs() {
     if (nextDtfId) {
       const totalDtfs = Number(nextDtfId) - 1;
       if (totalDtfs > 0) {
-        const existingIds = Array.from({ length: totalDtfs }, (_, i) => BigInt(i + 1));
+        const existingIds = Array.from({ length: totalDtfs }, (_, i) => BigInt(i + 1)).reverse();
         setDtfIds(existingIds);
       }
     }
   }, [nextDtfId]);
+
+  // Calculate pagination values
+  const totalPages = Math.ceil(dtfIds.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const currentDtfs = dtfIds.slice(startIndex, endIndex);
+
+  // Handle page changes
+  const handlePageChange = (pageNumber) => {
+    setCurrentPage(pageNumber);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  // Generate page numbers array
+  const getPageNumbers = () => {
+    const pageNumbers = [];
+    const maxVisiblePages = 5;
+
+    if (totalPages <= maxVisiblePages) {
+      for (let i = 1; i <= totalPages; i++) {
+        pageNumbers.push(i);
+      }
+    } else {
+      if (currentPage <= 3) {
+        for (let i = 1; i <= 5; i++) {
+          pageNumbers.push(i);
+        }
+      } else if (currentPage >= totalPages - 2) {
+        for (let i = totalPages - 4; i <= totalPages; i++) {
+          pageNumbers.push(i);
+        }
+      } else {
+        for (let i = currentPage - 2; i <= currentPage + 2; i++) {
+          pageNumbers.push(i);
+        }
+      }
+    }
+    return pageNumbers;
+  };
 
   return (
     <div className="min-h-screen">
@@ -396,11 +462,45 @@ function YourDTFs() {
         </div>
 
         {/* DTF Grid */}
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {dtfIds.map((id) => (
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 mb-8">
+          {currentDtfs.map((id) => (
             <DTFCreatorCard key={id.toString()} dtfId={id} address={address} />
           ))}
         </div>
+
+        {/* Pagination Controls */}
+        {totalPages > 1 && (
+          <div className="flex justify-center items-center gap-2">
+            <button
+              onClick={() => handlePageChange(currentPage - 1)}
+              disabled={currentPage === 1}
+              className="p-2 rounded-lg bg-gray-800 text-white disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-700"
+            >
+              <ChevronLeft size={20} />
+            </button>
+
+            {getPageNumbers().map((pageNum) => (
+              <button
+                key={pageNum}
+                onClick={() => handlePageChange(pageNum)}
+                className={`px-4 py-2 rounded-lg ${currentPage === pageNum
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-800 text-white hover:bg-gray-700'
+                  }`}
+              >
+                {pageNum}
+              </button>
+            ))}
+
+            <button
+              onClick={() => handlePageChange(currentPage + 1)}
+              disabled={currentPage === totalPages}
+              className="p-2 rounded-lg bg-gray-800 text-white disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-700"
+            >
+              <ChevronRight size={20} />
+            </button>
+          </div>
+        )}
 
         {/* Empty State */}
         {dtfIds.length === 0 && (

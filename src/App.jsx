@@ -7,7 +7,7 @@ import YourTrades from './pages/YourTrades';
 import Settings from './pages/Settings';
 import YourDTFs from './pages/YourDTFs';
 import LoadingScreen from './components/LoadingScreen';
-import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
+import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 
 function App() {
   const [isConnected, setIsConnected] = useState(false);
