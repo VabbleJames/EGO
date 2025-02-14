@@ -57,7 +57,7 @@ export default function WelcomeModal({ isOpen: externalIsOpen, onClose: external
               
               <div className="flex items-start gap-3">
                 <span className="text-white font-bold">3.</span>
-                <p className="text-gray-300">If you're right, you can sell your shares for $1 each on the bonding curve.</p>
+                <p className="text-gray-300">If you're right, sell your shares on the bonding curve to lock in profits.</p>
               </div>
               
               <div className="flex items-start gap-3">

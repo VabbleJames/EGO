@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { useAccount, useWriteContract, usePublicClient, useReadContract } from 'wagmi';
 import { formatUnits, parseUnits } from 'viem';
 import { erc20Abi } from 'viem';
@@ -8,9 +8,8 @@ import { SEPOLIA_CONTRACTS } from '../constants/addresses';
 import DTFMarket from '../contracts/abis/DTFMarket.json';
 
 function BuySharesModal({ dtf, isOpen, onClose, dtfId }) {
-  // 1. Hooks and state declarations
   const { address } = useAccount();
-  const  balances  = useTokenBalances(address);
+  const balances = useTokenBalances(address);
   const [shareAmount, setShareAmount] = useState('');
   const [isYes, setIsYes] = useState(true);
   const [isApproving, setIsApproving] = useState(false);
@@ -18,9 +17,17 @@ function BuySharesModal({ dtf, isOpen, onClose, dtfId }) {
   const [isBuying, setIsBuying] = useState(false);
   const { writeContractAsync } = useWriteContract();
   const client = usePublicClient();
-  const isLoading = isApproving || isBuying;
 
-  // 2. Contract read hooks
+  // Get pool info (liquidity)
+  const { data: poolInfo } = useReadContract({
+    address: SEPOLIA_CONTRACTS.DTF_MARKET,
+    abi: DTFMarket,
+    functionName: 'getDTFPoolInfo',
+    args: [dtfId],
+    enabled: Boolean(dtf)
+  });
+
+  // Get share prices
   const { data: sharePrices } = useReadContract({
     address: SEPOLIA_CONTRACTS.DTF_MARKET,
     abi: DTFMarket,
@@ -29,18 +36,119 @@ function BuySharesModal({ dtf, isOpen, onClose, dtfId }) {
     enabled: Boolean(dtf)
   });
 
-  // 3. Helper functions
-  const calculateUSDCCost = (shares) => {
+  // Get total shares for YES and NO sides
+  const { data: yesTokenSupply } = useReadContract({
+    address: dtf?.[9], // yesToken address
+    abi: erc20Abi,
+    functionName: 'totalSupply',
+    enabled: Boolean(dtf)
+  });
+
+  const { data: noTokenSupply } = useReadContract({
+    address: dtf?.[10], // noToken address
+    abi: erc20Abi,
+    functionName: 'totalSupply',
+    enabled: Boolean(dtf)
+  });
+
+  // Calculate base cost of shares
+  const calculateUSDCCost = useCallback((shares) => {
     if (!shares || !sharePrices) return 0;
-    const price = isYes ? sharePrices[0] : sharePrices[1];
-    if (!price) return 0;
-    return (Number(shares) * (Number(price) / (10 ** 6)));
-  };
+    
+    console.log('=== Cost Calculation ===');
+    console.log('Share Prices:', sharePrices);
+    console.log('Shares:', shares);
+    console.log('Is Yes Position:', isYes);
 
-  const usdcCost = calculateUSDCCost(shareAmount);
+    const price = isYes ? Number(sharePrices[0]) : Number(sharePrices[1]);
+    const cost = Number(shares) * (price / 1e6);
 
-  // 4. Define checkAllowance function
+    console.log('Price per share:', price / 1e6);
+    console.log('Total Cost:', cost);
+    return cost;
+  }, [sharePrices, isYes]);
+
+  // Calculate fees (2.5%)
+  const calculateFees = useCallback((shares) => {
+    const cost = calculateUSDCCost(shares);
+    return cost * 0.025;
+  }, [calculateUSDCCost]);
+
+  // Calculate potential payout
+  const calculatePotentialPayout = useCallback(() => {
+    if (!poolInfo || !shareAmount) return 0;
+    
+    console.log('=== Potential Payout Calculation ===');
+    console.log('Pool Info:', poolInfo);
+    console.log('Yes Token Supply:', yesTokenSupply);
+    console.log('No Token Supply:', noTokenSupply);
+    console.log('Share Amount:', shareAmount);
+    console.log('Is Yes Position:', isYes);
+
+    // Get existing shares for the relevant side
+    const existingShares = isYes ? 
+      Number(formatUnits(yesTokenSupply || 0n, 18)) : 
+      Number(formatUnits(noTokenSupply || 0n, 18));
+
+    // Get current pool size (in USDC)
+    const currentPool = (Number(poolInfo[0]) + Number(poolInfo[1])) / 1e6;
+    const cost = calculateUSDCCost(shareAmount);
+    const netAmount = cost * 0.975; // Amount after 2.5% fees
+
+    console.log('Existing Shares:', existingShares);
+    console.log('Current Pool Size:', currentPool);
+    console.log('User Cost:', cost);
+    console.log('Net Amount After Fees:', netAmount);
+
+    // Special case: First buyer on this side
+    if (existingShares === 0) {
+      const payout = currentPool + netAmount; // Add net amount after fees
+      console.log('First Buyer Case - Payout:', payout);
+      return payout;
+    }
+
+    // Regular case: Calculate based on share ratio
+    const userShares = Number(shareAmount);
+    const totalShares = existingShares + userShares;
+    const totalPool = currentPool + netAmount; // Use net amount after fees
+    const payout = (userShares / totalShares) * totalPool;
+    
+    console.log('Regular Case:');
+    console.log('Total Shares:', totalShares);
+    console.log('Total Pool:', totalPool);
+    console.log('Share Ratio:', userShares / totalShares);
+    console.log('Payout:', payout);
+    
+    return payout;
+}, [poolInfo, shareAmount, yesTokenSupply, noTokenSupply, isYes, calculateUSDCCost]);
+
+  // Calculate estimated profit
+  const calculateEstimatedProfit = useCallback(() => {
+    if (!shareAmount || !poolInfo) return 0;
+    
+    console.log('=== Profit Calculation ===');
+    const cost = calculateUSDCCost(shareAmount);
+    console.log('Cost:', cost);
+    const potentialPayout = calculatePotentialPayout();
+    console.log('Potential Payout:', potentialPayout);
+    const profit = potentialPayout - cost;
+    console.log('Estimated Profit:', profit);
+    
+    return profit;
+  }, [shareAmount, calculateUSDCCost, calculatePotentialPayout, poolInfo]);
+
+  // Calculate price impact
+  const calculatePriceImpact = useCallback((shares) => {
+    if (!poolInfo || !shares) return 0;
+    const totalPool = (Number(poolInfo[0]) + Number(poolInfo[1])) / 1e6;
+    if (totalPool === 0) return 0;
+    const cost = calculateUSDCCost(shares);
+    return (cost / totalPool) * 100;
+  }, [poolInfo, calculateUSDCCost]);
+
+  // Allowance checking
   const checkAllowance = useCallback(async () => {
+    if (!address || !calculateUSDCCost(shareAmount)) return false;
     try {
       const allowance = await client.readContract({
         address: SEPOLIA_CONTRACTS.TOKENS.USDC,
@@ -48,46 +156,30 @@ function BuySharesModal({ dtf, isOpen, onClose, dtfId }) {
         functionName: 'allowance',
         args: [address, SEPOLIA_CONTRACTS.DTF_MARKET]
       });
-      const amountToApprove = parseUnits(usdcCost.toString(), 6);
+      const amountToApprove = parseUnits(calculateUSDCCost(shareAmount).toString(), 6);
       return allowance >= amountToApprove;
     } catch (error) {
       console.error('Error checking allowance:', error);
       return false;
     }
-  }, [address, client, usdcCost]);
+  }, [address, client, calculateUSDCCost, shareAmount]);
 
-  // 5. useEffect with checkAllowance
   useEffect(() => {
     const checkCurrentAllowance = async () => {
-      if (!address || !usdcCost) return;
+      if (!address || !calculateUSDCCost(shareAmount)) return;
       const isApproved = await checkAllowance();
       setHasAllowance(isApproved);
     };
 
     checkCurrentAllowance();
-  }, [address, usdcCost, checkAllowance]);
+  }, [address, calculateUSDCCost, shareAmount, checkAllowance]);
 
-  const calculateFees = () => {
-    return usdcCost * 0.025; // 2.5% of USDC cost
-  };
-
-  const calculatePotentialPayout = () => {
-    return shareAmount ? Number(shareAmount) : 0; // $1 per share
-  };
-
-  const calculateEstimatedProfit = () => {
-    const fees = calculateFees();
-    const payout = calculatePotentialPayout();
-    return payout - (usdcCost + fees);
-  };
-
-  // 6. Action handlers
   const handleApprove = async () => {
-    if (!usdcCost) return;
+    if (!calculateUSDCCost(shareAmount)) return;
 
     try {
       setIsApproving(true);
-      const amountToApprove = parseUnits(usdcCost.toString(), 6);
+      const amountToApprove = parseUnits(calculateUSDCCost(shareAmount).toString(), 6);
 
       const hash = await writeContractAsync({
         address: SEPOLIA_CONTRACTS.TOKENS.USDC,
@@ -96,7 +188,7 @@ function BuySharesModal({ dtf, isOpen, onClose, dtfId }) {
         args: [SEPOLIA_CONTRACTS.DTF_MARKET, amountToApprove]
       });
 
-      const receipt = await client.waitForTransactionReceipt({ hash });
+      await client.waitForTransactionReceipt({ hash });
       const isApproved = await checkAllowance();
       setHasAllowance(isApproved);
 
@@ -109,34 +201,31 @@ function BuySharesModal({ dtf, isOpen, onClose, dtfId }) {
 
   const handleBuy = async () => {
     if (!shareAmount || isBuying || !hasAllowance) return;
-  
+
     try {
       setIsBuying(true);
       const shareAmountBigInt = parseUnits(shareAmount, 18);
-  
+
       const hash = await writeContractAsync({
         address: SEPOLIA_CONTRACTS.DTF_MARKET,
         abi: DTFMarket,
         functionName: 'buyShares',
-        args: [
-          dtfId,          
-          isYes,          
-          shareAmountBigInt  
-        ]
+        args: [dtfId, isYes, shareAmountBigInt]
       });
-  
+
       await client.waitForTransactionReceipt({ hash });
-      
-      // Pass both success and purchase type back to parent
-      onClose(true, isYes);
-  
+      onClose();
+
     } catch (error) {
       console.error('Error buying shares:', error);
-      onClose(false, false);
     } finally {
       setIsBuying(false);
     }
   };
+
+  // Get current shares for display
+  const currentYesShares = yesTokenSupply ? Number(formatUnits(yesTokenSupply, 18)) : 0;
+  const currentNoShares = noTokenSupply ? Number(formatUnits(noTokenSupply, 18)) : 0;
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -149,29 +238,29 @@ function BuySharesModal({ dtf, isOpen, onClose, dtfId }) {
         <div className="flex gap-3 mb-6">
           <button
             onClick={() => setIsYes(true)}
-            className={`flex-1 py-4 px-6 rounded-xl font-semibold text-lg ${isYes
-                ? 'bg-[#22C55E] text-white'
-                : 'bg-[#1E1E1E] text-gray-400'
-              }`}
+            className={`flex-1 py-4 px-6 rounded-xl font-semibold text-lg ${
+              isYes ? 'bg-[#22C55E] text-white' : 'bg-[#1E1E1E] text-gray-400'
+            }`}
           >
-            YES (${sharePrices ? Number(sharePrices[0]) / (10 ** 6) : '0.00'})
+            YES (${sharePrices ? (Number(sharePrices[0]) / 1e6).toFixed(1) : '0.0'})
+            <div className="text-sm mt-1 opacity-75">
+            </div>
           </button>
           <button
             onClick={() => setIsYes(false)}
-            className={`flex-1 py-4 px-6 rounded-xl font-semibold text-lg ${!isYes
-                ? 'bg-red-500 text-white'
-                : 'bg-[#1E1E1E] text-gray-400'
-              }`}
+            className={`flex-1 py-4 px-6 rounded-xl font-semibold text-lg ${
+              !isYes ? 'bg-red-500 text-white' : 'bg-[#1E1E1E] text-gray-400'
+            }`}
           >
-            NO (${sharePrices ? Number(sharePrices[1]) / (10 ** 6) : '0.00'})
+            NO (${sharePrices ? (Number(sharePrices[1]) / 1e6).toFixed(1) : '0.0'})
+            <div className="text-sm mt-1 opacity-75">
+            </div>
           </button>
         </div>
 
         {/* Share Amount Input */}
         <div className="mb-4">
-          <label className="text-gray-400 text-sm mb-2 block">
-            Share Amount
-          </label>
+          <label className="text-gray-400 text-sm mb-2 block">Share Amount</label>
           <input
             type="number"
             value={shareAmount}
@@ -180,38 +269,62 @@ function BuySharesModal({ dtf, isOpen, onClose, dtfId }) {
             placeholder="0"
           />
           <div className="text-right text-gray-400 mt-2">
-          Your Balance: ${balances?.USDC ? formatUnits(balances.USDC, 6) : '0.00'} USDC
+            Your Balance: ${formatUnits(balances?.USDC || 0n, 6)} USDC
           </div>
         </div>
 
         {/* Calculations */}
         <div className="space-y-3 text-gray-400">
           <div className="flex justify-between">
-            <span>Cost incl fees:</span>
-            <span className="text-white">${usdcCost.toFixed(2)} USDC</span>
+            <span>Cost:</span>
+            <span className="text-white">
+              ${calculateUSDCCost(shareAmount).toFixed(2)} USDC
+            </span>
           </div>
 
           <div className="flex justify-between">
             <span>Fees @ 2.5%:</span>
-            <span className="text-white">${calculateFees().toFixed(2)}c</span>
+            <span className="text-white">
+              ${calculateFees(shareAmount).toFixed(2)} USDC
+            </span>
           </div>
+
+          {/*<div className="flex justify-between">
+            <span>Price Impact:</span>
+            <span className={`${
+              calculatePriceImpact(shareAmount) > 5 ? 'text-red-500' : 'text-white'
+            }`}>
+              {calculatePriceImpact(shareAmount).toFixed(2)}%
+            </span>
+          </div> */}
+
+         {/* <div className="flex justify-between">
+            <span>Share Ratio:</span>
+            <span className="text-white">
+              {shareAmount && (isYes ? currentYesShares : currentNoShares) ? (
+                (Number(shareAmount) / (Number(shareAmount) + (isYes ? currentYesShares : currentNoShares)) * 100).toFixed(2)
+              ) : '0.00'}%
+            </span>
+          </div> */}
 
           <div className="flex justify-between">
             <span>Potential Payout:</span>
-            <span className="text-white">${calculatePotentialPayout()} USDC</span>
+            <span className="text-white">
+              ${calculatePotentialPayout().toFixed(2)} USDC
+            </span>
           </div>
 
           <div className="flex justify-between">
-            <span>Estimate Profit:</span>
+            <span>Estimated Profit:</span>
             <span className={calculateEstimatedProfit() > 0 ? 'text-[#22C55E]' : 'text-red-500'}>
               {calculateEstimatedProfit() > 0 ? '+' : ''}${calculateEstimatedProfit().toFixed(2)} USDC
             </span>
           </div>
 
-          <div className="flex justify-between">
+        {/*  <div className="flex justify-between">
             <span>Payout Rate:</span>
             <span className="text-white">$1 = 1 share</span>
-          </div>
+          </div> */}
         </div>
 
         {/* Action Button */}
@@ -219,10 +332,11 @@ function BuySharesModal({ dtf, isOpen, onClose, dtfId }) {
           <button
             onClick={handleApprove}
             disabled={isApproving || !shareAmount}
-            className={`w-full mt-6 py-4 rounded-xl text-white font-semibold text-lg ${isApproving || !shareAmount
+            className={`w-full mt-6 py-4 rounded-xl text-white font-semibold text-lg ${
+              isApproving || !shareAmount
                 ? 'bg-gray-500 cursor-not-allowed'
                 : 'bg-[#22C55E] hover:bg-[#16A34A]'
-              }`}
+            }`}
           >
             {isApproving ? 'Approving...' : 'Approve USDC'}
           </button>
@@ -230,10 +344,11 @@ function BuySharesModal({ dtf, isOpen, onClose, dtfId }) {
           <button
             onClick={handleBuy}
             disabled={!shareAmount || isBuying}
-            className={`w-full mt-6 py-4 rounded-xl text-white font-semibold text-lg ${!shareAmount || isBuying
+            className={`w-full mt-6 py-4 rounded-xl text-white font-semibold text-lg ${
+              !shareAmount || isBuying
                 ? 'bg-gray-500 cursor-not-allowed'
                 : 'bg-[#22C55E] hover:bg-[#16A34A]'
-              }`}
+            }`}
           >
             {isBuying ? 'Buying...' : 'Buy Shares'}
           </button>
