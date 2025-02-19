@@ -38,23 +38,25 @@ function BuySharesModal({ dtf, isOpen, onClose, dtfId }) {
 
   // Get total shares for YES and NO sides
   const { data: yesTokenSupply } = useReadContract({
-    address: dtf?.[9], // yesToken address
+    address: dtf?.[7], // yesToken address
     abi: erc20Abi,
     functionName: 'totalSupply',
-    enabled: Boolean(dtf)
+    enabled: Boolean(dtf && dtf[7])
   });
 
   const { data: noTokenSupply } = useReadContract({
-    address: dtf?.[10], // noToken address
+    address: dtf?.[8], // noToken address
     abi: erc20Abi,
     functionName: 'totalSupply',
-    enabled: Boolean(dtf)
+    enabled: Boolean(dtf && dtf[8])
   });
+
+  console.log('DTF:', dtf)
 
   // Calculate base cost of shares
   const calculateUSDCCost = useCallback((shares) => {
     if (!shares || !sharePrices) return 0;
-    
+
     console.log('=== Cost Calculation ===');
     console.log('Share Prices:', sharePrices);
     console.log('Shares:', shares);
@@ -80,43 +82,48 @@ function BuySharesModal({ dtf, isOpen, onClose, dtfId }) {
     
     console.log('=== Potential Payout Calculation ===');
     console.log('Pool Info:', poolInfo);
-    console.log('Yes Token Supply:', yesTokenSupply);
-    console.log('No Token Supply:', noTokenSupply);
-    console.log('Share Amount:', shareAmount);
-    console.log('Is Yes Position:', isYes);
+    console.log('Raw Yes Token Supply:', yesTokenSupply);
+    console.log('Raw No Token Supply:', noTokenSupply);
+
+    // Guard against undefined token supplies
+    if (yesTokenSupply === undefined || noTokenSupply === undefined) {
+        console.log('Token supplies not loaded yet');
+        return 0;
+    }
 
     // Get existing shares for the relevant side
     const existingShares = isYes ? 
-      Number(formatUnits(yesTokenSupply || 0n, 18)) : 
-      Number(formatUnits(noTokenSupply || 0n, 18));
+      Number(formatUnits(yesTokenSupply, 18)) : 
+      Number(formatUnits(noTokenSupply, 18));
 
     // Get current pool size (in USDC)
     const currentPool = (Number(poolInfo[0]) + Number(poolInfo[1])) / 1e6;
     const cost = calculateUSDCCost(shareAmount);
-    const netAmount = cost * 0.975; // Amount after 2.5% fees
+    const netAmount = cost * 0.975; // Remove 2.5% fees
+    const userShares = Number(shareAmount);
 
     console.log('Existing Shares:', existingShares);
     console.log('Current Pool Size:', currentPool);
-    console.log('User Cost:', cost);
-    console.log('Net Amount After Fees:', netAmount);
+    console.log('User Shares:', userShares);
+    console.log('Net Amount (after fees):', netAmount);
 
     // Special case: First buyer on this side
     if (existingShares === 0) {
-      const payout = currentPool + netAmount; // Add net amount after fees
+      const payout = currentPool + netAmount;
       console.log('First Buyer Case - Payout:', payout);
       return payout;
     }
 
     // Regular case: Calculate based on share ratio
-    const userShares = Number(shareAmount);
     const totalShares = existingShares + userShares;
-    const totalPool = currentPool + netAmount; // Use net amount after fees
-    const payout = (userShares / totalShares) * totalPool;
+    const shareRatio = userShares / totalShares;
+    const totalPool = currentPool + netAmount;
+    const payout = shareRatio * totalPool;
     
     console.log('Regular Case:');
     console.log('Total Shares:', totalShares);
+    console.log('Share Ratio:', shareRatio);
     console.log('Total Pool:', totalPool);
-    console.log('Share Ratio:', userShares / totalShares);
     console.log('Payout:', payout);
     
     return payout;
@@ -125,7 +132,7 @@ function BuySharesModal({ dtf, isOpen, onClose, dtfId }) {
   // Calculate estimated profit
   const calculateEstimatedProfit = useCallback(() => {
     if (!shareAmount || !poolInfo) return 0;
-    
+
     console.log('=== Profit Calculation ===');
     const cost = calculateUSDCCost(shareAmount);
     console.log('Cost:', cost);
@@ -133,7 +140,7 @@ function BuySharesModal({ dtf, isOpen, onClose, dtfId }) {
     console.log('Potential Payout:', potentialPayout);
     const profit = potentialPayout - cost;
     console.log('Estimated Profit:', profit);
-    
+
     return profit;
   }, [shareAmount, calculateUSDCCost, calculatePotentialPayout, poolInfo]);
 
@@ -238,21 +245,19 @@ function BuySharesModal({ dtf, isOpen, onClose, dtfId }) {
         <div className="flex gap-3 mb-6">
           <button
             onClick={() => setIsYes(true)}
-            className={`flex-1 py-4 px-6 rounded-xl font-semibold text-lg ${
-              isYes ? 'bg-[#22C55E] text-white' : 'bg-[#1E1E1E] text-gray-400'
-            }`}
+            className={`flex-1 py-4 px-6 rounded-xl font-semibold text-lg ${isYes ? 'bg-[#22C55E] text-white' : 'bg-[#1E1E1E] text-gray-400'
+              }`}
           >
-            YES (${sharePrices ? (Number(sharePrices[0]) / 1e6).toFixed(1) : '0.0'})
+            YES (${sharePrices ? (Number(sharePrices[0]) / 1e6).toFixed(2) : '0.00'})
             <div className="text-sm mt-1 opacity-75">
             </div>
           </button>
           <button
             onClick={() => setIsYes(false)}
-            className={`flex-1 py-4 px-6 rounded-xl font-semibold text-lg ${
-              !isYes ? 'bg-red-500 text-white' : 'bg-[#1E1E1E] text-gray-400'
-            }`}
+            className={`flex-1 py-4 px-6 rounded-xl font-semibold text-lg ${!isYes ? 'bg-red-500 text-white' : 'bg-[#1E1E1E] text-gray-400'
+              }`}
           >
-            NO (${sharePrices ? (Number(sharePrices[1]) / 1e6).toFixed(1) : '0.0'})
+            NO (${sharePrices ? (Number(sharePrices[1]) / 1e6).toFixed(2) : '0.00'})
             <div className="text-sm mt-1 opacity-75">
             </div>
           </button>
@@ -298,7 +303,7 @@ function BuySharesModal({ dtf, isOpen, onClose, dtfId }) {
             </span>
           </div> */}
 
-         {/* <div className="flex justify-between">
+          {/* <div className="flex justify-between">
             <span>Share Ratio:</span>
             <span className="text-white">
               {shareAmount && (isYes ? currentYesShares : currentNoShares) ? (
@@ -314,14 +319,14 @@ function BuySharesModal({ dtf, isOpen, onClose, dtfId }) {
             </span>
           </div>
 
-          <div className="flex justify-between">
+          {/* <div className="flex justify-between">
             <span>Estimated Profit:</span>
             <span className={calculateEstimatedProfit() > 0 ? 'text-[#22C55E]' : 'text-red-500'}>
               {calculateEstimatedProfit() > 0 ? '+' : ''}${calculateEstimatedProfit().toFixed(2)} USDC
             </span>
           </div>
 
-        {/*  <div className="flex justify-between">
+          <div className="flex justify-between">
             <span>Payout Rate:</span>
             <span className="text-white">$1 = 1 share</span>
           </div> */}
@@ -332,11 +337,10 @@ function BuySharesModal({ dtf, isOpen, onClose, dtfId }) {
           <button
             onClick={handleApprove}
             disabled={isApproving || !shareAmount}
-            className={`w-full mt-6 py-4 rounded-xl text-white font-semibold text-lg ${
-              isApproving || !shareAmount
+            className={`w-full mt-6 py-4 rounded-xl text-white font-semibold text-lg ${isApproving || !shareAmount
                 ? 'bg-gray-500 cursor-not-allowed'
                 : 'bg-[#22C55E] hover:bg-[#16A34A]'
-            }`}
+              }`}
           >
             {isApproving ? 'Approving...' : 'Approve USDC'}
           </button>
@@ -344,11 +348,10 @@ function BuySharesModal({ dtf, isOpen, onClose, dtfId }) {
           <button
             onClick={handleBuy}
             disabled={!shareAmount || isBuying}
-            className={`w-full mt-6 py-4 rounded-xl text-white font-semibold text-lg ${
-              !shareAmount || isBuying
+            className={`w-full mt-6 py-4 rounded-xl text-white font-semibold text-lg ${!shareAmount || isBuying
                 ? 'bg-gray-500 cursor-not-allowed'
                 : 'bg-[#22C55E] hover:bg-[#16A34A]'
-            }`}
+              }`}
           >
             {isBuying ? 'Buying...' : 'Buy Shares'}
           </button>

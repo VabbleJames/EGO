@@ -58,6 +58,7 @@ function NavigationBar() {
 
           <div className="hidden md:flex items-center space-x-8">
             <NavLink to="/trading" showPulse={true}>Live EGOs</NavLink>
+            <NavLink to="/ego-farming">EGO Farming</NavLink>
             <NavLink to="/trades">Your Shares</NavLink>
             <NavLink to="/your-dtfs">Your EGOs</NavLink>
             <NavLink to="/create">Create EGO</NavLink>

@@ -231,7 +231,7 @@ function EnhancedDTFCard({ dtfId }) {
             <div className="w-full bg-gray-800 rounded-full h-2">
               <div
                 className="bg-blue-500 rounded-full h-2 transition-all"
-                style={{ width: `${Math.max(0, (timeLeft / (24 * 60 * 60 * 1000)) * 100)}%` }}
+                style={{ width: `${Math.min(100, Math.max(0, (timeLeft / (24 * 60 * 60 * 1000)) * 100))}%` }}
               />
             </div>
           </div>
@@ -279,7 +279,7 @@ function EnhancedDTFCard({ dtfId }) {
                 className={`transition-colors duration-300 ${isYesPriceFlashing ? 'text-green-400' : ''
                   }`}
               >
-                ${sharePrices ? Number(sharePrices[0]) / (10 ** 6) : 'Loading...'}
+                ${sharePrices ? (Number(sharePrices[0]) / (10 ** 6)).toFixed(2) : 'Loading...'}
               </span>
             </div>
             <div className="w-full bg-gray-700 rounded-full h-2">
@@ -299,7 +299,7 @@ function EnhancedDTFCard({ dtfId }) {
                 className={`transition-colors duration-300 ${isNoPriceFlashing ? 'text-red-400' : ''
                   }`}
               >
-                ${sharePrices ? Number(sharePrices[1]) / (10 ** 6) : 'Loading...'}
+                ${sharePrices ? (Number(sharePrices[1]) / (10 ** 6)).toFixed(2) : 'Loading...'}
               </span>
             </div>
             <div className="w-full bg-gray-700 rounded-full h-2">

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useReadContract } from 'wagmi';
 import { SEPOLIA_CONTRACTS } from '../constants/addresses';
 import DTFMarket from '../contracts/abis/DTFMarket.json';
@@ -11,6 +11,7 @@ function Trading() {
   const [dtfIds, setDtfIds] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 9;
+  const videoRef = useRef(null);
 
   const { data: nextDtfId } = useReadContract({
     address: SEPOLIA_CONTRACTS.DTF_MARKET,
@@ -27,6 +28,12 @@ function Trading() {
       }
     }
   }, [nextDtfId]);
+
+  if (videoRef.current) {
+    videoRef.current.play().catch(error => {
+      console.log("Video autoplay failed:", error);
+    });
+  }
 
   // Calculate pagination values
   const totalPages = Math.ceil(dtfIds.length / itemsPerPage);
@@ -68,13 +75,32 @@ function Trading() {
   };
 
   return (
+
     <div className="min-h-screen">
       <div className="max-w-7xl mx-auto px-4 py-8">
+
+         {/* Background Video */}
+      <div className="fixed inset-0 w-full h-full -z-20">
+        <video
+          ref={videoRef}
+          className="w-full h-full object-cover opacity-5"
+          autoPlay
+          muted
+          loop
+          playsInline
+        >
+          <source 
+            src="/video/Binary.mp4" 
+            type="video/mp4"
+          />
+        </video>
+      </div>
+
         {/* Enhanced header with trading stats */}
         <div className="flex justify-between items-center mb-8">
           <div>
             <h1 className="text-3xl font-bold text-white mb-2"></h1>
-            <div className="text-gray-400">The future of prediction markets and AI</div>
+            <div className="text-gray-400">Thought of the day: It's a good idea to start farming... ngl</div>
           </div>
           <div className="flex gap-8">
             <div className="text-right">
